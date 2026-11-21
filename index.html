@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor JSON por bloques</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--txt:#1c2330;--mut:#667085;--bd:#dde1e8;
+  --str:#0a7d3e;--num:#b45309;--bool:#7c3aed;--nul:#6b7280;--key:#1d4ed8;
+  --d0:#2563eb;--d1:#0d9488;--d2:#d97706;--d3:#db2777;--d4:#7c3aed;--d5:#16a34a;
+  --hl:#fde68a;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#12151b;--panel:#1a1f28;--txt:#e5e9f0;--mut:#9aa4b5;--bd:#2c3340;
+  --str:#6ee7a0;--num:#fbbf6a;--bool:#c4a5ff;--nul:#9ca3af;--key:#8ab4ff;
+  --d0:#60a5fa;--d1:#2dd4bf;--d2:#fbbf24;--d3:#f472b6;--d4:#a78bfa;--d5:#4ade80;
+  --hl:#5b4a0a;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--bd);padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+h1{font-size:16px;margin:0 8px 0 0}
+button,.btn,input[type=search]{font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover,.btn:hover{border-color:var(--d0)}
+button.on{background:var(--d0);color:#fff;border-color:var(--d0)}
+input[type=search]{cursor:text;min-width:160px}
+input[type=file]{display:none}
+main{padding:14px;max-width:1200px;margin:auto}
+#drop{border:2px dashed var(--bd);border-radius:10px;padding:18px;text-align:center;color:var(--mut);background:var(--panel)}
+#drop.over{border-color:var(--d0);color:var(--d0)}
+textarea{width:100%;height:110px;margin-top:10px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--txt);border:1px solid var(--bd);border-radius:6px;padding:8px}
+#info{margin:10px 0;color:var(--mut);font-size:13px}
+#err{color:#dc2626;margin:8px 0;white-space:pre-wrap}
+.blk{border:1px solid var(--bd);border-left:5px solid var(--c);background:var(--panel);border-radius:8px;margin:6px 0}
+.blk>.hd{display:flex;gap:8px;align-items:center;padding:6px 10px;cursor:pointer;user-select:none;background:color-mix(in srgb,var(--c) 10%,transparent);border-radius:0 8px 0 0}
+.blk.closed>.hd{border-radius:0 8px 8px 0}
+.blk>.hd .arr{width:12px;color:var(--c);transition:transform .15s}
+.blk.closed>.hd .arr{transform:rotate(-90deg)}
+.blk.closed>.bd{display:none}
+.bd{padding:2px 10px 8px 14px}
+.k{color:var(--key);font-weight:600}
+.badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--c);color:#fff;white-space:nowrap}
+.row{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--bd);align-items:baseline}
+.row:last-child{border-bottom:0}
+.row .k{flex:0 0 auto;max-width:40%;overflow-wrap:anywhere}
+.v{overflow-wrap:anywhere;white-space:pre-wrap;min-width:0}
+.t-string{color:var(--str)}.t-number{color:var(--num)}.t-boolean{color:var(--bool);font-weight:600}.t-null{color:var(--nul);font-style:italic}
+.idx{color:var(--mut)}
+mark{background:var(--hl);color:inherit;border-radius:2px}
+.hide{display:none!important}
+pre#raw{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:12px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+.pk{color:var(--key)}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;background:currentColor;vertical-align:-1px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Visor JSON</h1>
+  <label class="btn" for="f">Abrir .json</label><input id="f" type="file" accept=".json,application/json,text/plain">
+  <button id="bEx">Expandir todo</button>
+  <button id="bCo">Colapsar todo</button>
+  <button id="vB" class="on">Bloques</button>
+  <button id="vR">Texto coloreado</button>
+  <input id="q" type="search" placeholder="Buscar clave o texto…">
+  <button id="bCp">Copiar JSON formateado</button>
+</header>
+<main>
+  <div id="drop">Arrastra aquí un archivo .json, o pulsa «Abrir .json», o pega el contenido abajo
+    <textarea id="ta" placeholder='Pega aquí el JSON…'></textarea>
+    <div style="margin-top:8px"><button id="bGo">Mostrar</button> <button id="bEj">Ejemplo</button></div>
+  </div>
+  <div id="err"></div>
+  <div id="info"></div>
+  <div class="legend">
+    <span style="color:var(--d0)">Nivel 0</span><span style="color:var(--d1)">Nivel 1</span><span style="color:var(--d2)">Nivel 2</span><span style="color:var(--d3)">Nivel 3</span><span style="color:var(--d4)">Nivel 4</span>
+    <span style="color:var(--str)">texto</span><span style="color:var(--num)">número</span><span style="color:var(--bool)">booleano</span><span style="color:var(--nul)">null</span>
+  </div>
+  <div id="out"></div>
+  <pre id="raw" class="hide"></pre>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+let DATA=null, view='b';
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const type=v=>v===null?'null':Array.isArray(v)?'array':typeof v;
+
+function scalar(v){
+  const t=type(v);
+  const txt=t==='string'?v:String(v);
+  return `<span class="v t-${t}" data-s="${esc(txt).replace(/"/g,'&quot;').toLowerCase()}">${t==='string'?'“'+esc(v)+'”':esc(txt)}</span>`;
+}
+function block(key,v,d){
+  const t=type(v), c=`var(--d${d%6})`;
+  const isArr=t==='array';
+  const ents=isArr?v.map((x,i)=>[i,x]):Object.entries(v);
+  const label=isArr?`Lista · ${ents.length} elem.`:`Objeto · ${ents.length} campos`;
+  let h=`<div class="blk ${d>=2?'closed':''}" style="--c:${c}"><div class="hd"><span class="arr">▼</span>`+
+        `<span class="k" data-s="${esc(String(key)).toLowerCase()}">${isArr&&false?'':esc(String(key))}</span><span class="badge">${label}</span></div><div class="bd">`;
+  let rows='';
+  for(const [k,x] of ents){
+    const tx=type(x);
+    if(tx==='object'||tx==='array'){
+      if((tx==='array'?x.length:Object.keys(x).length)===0){
+        rows+=`<div class="row"><span class="k ${isArr?'idx':''}" data-s="${esc(String(k)).toLowerCase()}">${isArr?'['+k+']':esc(k)}</span><span class="v t-null">${tx==='array'?'[ ]':'{ }'}</span></div>`;
+      } else rows+=block(isArr?'['+k+']':k,x,d+1);
+    } else {
+      rows+=`<div class="row"><span class="k ${isArr?'idx':''}" data-s="${esc(String(k)).toLowerCase()}">${isArr?'['+k+']':esc(k)}</span>${scalar(x)}</div>`;
+    }
+  }
+  return h+rows+'</div></div>';
+}
+function stats(v){let o=0,a=0,s=0,n=0,b=0,z=0,depth=0;
+  (function w(x,d){depth=Math.max(depth,d);const t=type(x);
+    if(t==='object'){o++;Object.values(x).forEach(y=>w(y,d+1))}
+    else if(t==='array'){a++;x.forEach(y=>w(y,d+1))}
+    else if(t==='string')s++;else if(t==='number')n++;else if(t==='boolean')b++;else z++;})(v,0);
+  return `${o} objetos · ${a} listas · ${s} textos · ${n} números · ${b} booleanos · ${z} null · profundidad ${depth}`;}
+
+function colorRaw(v,ind=0){
+  const p='  '.repeat(ind),t=type(v);
+  if(t==='object'){const e=Object.entries(v);if(!e.length)return '{}';
+    return '{\n'+e.map(([k,x])=>p+'  <span class="pk">"'+esc(k)+'"</span>: '+colorRaw(x,ind+1)).join(',\n')+'\n'+p+'}';}
+  if(t==='array'){if(!v.length)return '[]';return '[\n'+v.map(x=>p+'  '+colorRaw(x,ind+1)).join(',\n')+'\n'+p+']';}
+  if(t==='string')return '<span class="t-string">'+esc(JSON.stringify(v))+'</span>';
+  return `<span class="t-${t}">${esc(JSON.stringify(v))}</span>`;
+}
+function render(){
+  $('#err').textContent='';
+  const t=type(DATA);
+  if(t==='object'||t==='array') $('#out').innerHTML=block('Raíz',DATA,0);
+  else $('#out').innerHTML=`<div class="blk" style="--c:var(--d0)"><div class="bd">${scalar(DATA)}</div></div>`;
+  $('#raw').innerHTML=colorRaw(DATA);
+  $('#info').textContent=stats(DATA);
+  show();
+}
+function show(){
+  $('#out').classList.toggle('hide',view!=='b');
+  $('#raw').classList.toggle('hide',view!=='r');
+  $('#vB').classList.toggle('on',view==='b');$('#vR').classList.toggle('on',view==='r');
+}
+function load(text){
+  try{DATA=JSON.parse(text.replace(/^\uFEFF/,''));render();}
+  catch(e){$('#err').textContent='JSON no válido: '+e.message;}
+}
+$('#out').addEventListener('click',e=>{const h=e.target.closest('.hd');if(h)h.parentElement.classList.toggle('closed');});
+$('#bEx').onclick=()=>document.querySelectorAll('.blk').forEach(b=>b.classList.remove('closed'));
+$('#bCo').onclick=()=>document.querySelectorAll('.blk').forEach((b,i)=>b.classList.toggle('closed',i>0));
+$('#vB').onclick=()=>{view='b';show()};$('#vR').onclick=()=>{view='r';show()};
+$('#bGo').onclick=()=>load($('#ta').value);
+$('#f').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(load)};
+const dr=$('#drop');
+['dragover','dragenter'].forEach(ev=>dr.addEventListener(ev,e=>{e.preventDefault();dr.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>dr.addEventListener(ev,e=>{e.preventDefault();dr.classList.remove('over')}));
+dr.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)f.text().then(load)});
+$('#bEj').onclick=()=>{const s={proyecto:"Nave 3",activo:true,version:2.1,responsable:null,
+  bloques:[{id:"B-01",peso_t:12.5,piezas:[{ref:"P1",material:"AH36"},{ref:"P2",material:"S275"}]},{id:"B-02",peso_t:8,piezas:[]}],
+  config:{unidades:"mm",tolerancias:{lineal:0.5,angular:"1°"}}};
+  $('#ta').value=JSON.stringify(s,null,2);load($('#ta').value)};
+$('#bCp').onclick=async()=>{if(DATA===null)return;try{await navigator.clipboard.writeText(JSON.stringify(DATA,null,2));$('#bCp').textContent='Copiado ✓';setTimeout(()=>$('#bCp').textContent='Copiar JSON formateado',1500)}catch(e){$('#bCp').textContent='No se pudo copiar'}};
+$('#q').oninput=e=>{
+  const q=e.target.value.trim().toLowerCase();
+  document.querySelectorAll('mark').forEach(m=>m.replaceWith(document.createTextNode(m.textContent)));
+  const all=document.querySelectorAll('#out .blk,#out .row');
+  all.forEach(n=>n.classList.remove('hide'));
+  if(!q)return;
+  const hit=n=>[...n.querySelectorAll('[data-s]')].some(x=>x.dataset.s.includes(q));
+  document.querySelectorAll('#out .row').forEach(r=>{
+    const m=r.querySelector('[data-s]')&&[...r.querySelectorAll('[data-s]')].some(x=>x.dataset.s.includes(q));
+    r.classList.toggle('hide',!m);
+    if(m)r.querySelectorAll('[data-s]').forEach(x=>{if(x.dataset.s.includes(q))x.innerHTML=x.innerHTML.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/[&<>]/g,''),'ig'),s=>'<mark>'+s+'</mark>')});
+  });
+  const blks=[...document.querySelectorAll('#out .blk')].reverse();
+  blks.forEach(b=>{
+    const vis=b.querySelector(':scope>.bd>.row:not(.hide), :scope>.bd>.blk:not(.hide)');
+    const own=b.querySelector(':scope>.hd .k').dataset.s.includes(q);
+    if(vis){b.classList.remove('hide','closed')}
+    else if(own){b.classList.remove('hide');b.querySelectorAll('.row,.blk').forEach(x=>x.classList.remove('hide'))}
+    else b.classList.add('hide');
+  });
+};
+</script>
+</body>
+</html>
