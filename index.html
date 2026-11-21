@@ -19,14 +19,18 @@
 }}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
-header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--bd);padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-h1{font-size:16px;margin:0 8px 0 0}
-button,.btn,input[type=search]{font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;cursor:pointer}
+.app{display:flex;align-items:flex-start;min-height:100vh}
+aside{position:sticky;top:0;flex:0 0 300px;width:300px;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--bd);padding:12px;display:flex;flex-direction:column;gap:8px}
+@media(max-width:760px){.app{flex-direction:column}aside{position:static;width:100%;flex:none;height:auto;border-right:0;border-bottom:1px solid var(--bd)}}
+h1{font-size:16px;margin:0 0 4px}
+button,.btn,input[type=search]{font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:7px 10px;cursor:pointer;text-align:center}
+aside>button,aside>.btn{width:100%}
 button:hover,.btn:hover{border-color:var(--d0)}
 button.on{background:var(--d0);color:#fff;border-color:var(--d0)}
-input[type=search]{cursor:text;min-width:160px}
+input[type=search]{cursor:text;flex:1;min-width:0}
+.srch{display:flex;gap:4px}
 input[type=file]{display:none}
-main{padding:14px;max-width:1200px;margin:auto}
+main{flex:1;min-width:0;padding:14px;max-width:1200px}
 #drop{border:2px dashed var(--bd);border-radius:10px;padding:18px;text-align:center;color:var(--mut);background:var(--panel)}
 #drop.over{border-color:var(--d0);color:var(--d0)}
 textarea{width:100%;height:110px;margin-top:10px;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--txt);border:1px solid var(--bd);border-radius:6px;padding:8px}
@@ -56,16 +60,17 @@ pre#raw{background:var(--panel);border:1px solid var(--bd);border-radius:8px;pad
 </style>
 </head>
 <body>
-<header>
+<div class="app">
+<aside>
   <h1>Visor JSON</h1>
   <label class="btn" for="f">Abrir .json</label><input id="f" type="file" accept=".json,application/json,text/plain">
   <button id="bEx">Expandir todo</button>
   <button id="bCo">Colapsar todo</button>
   <button id="vB" class="on">Bloques</button>
   <button id="vR">Texto coloreado</button>
-  <input id="q" type="search" placeholder="Buscar clave o texto…">
+  <div class="srch"><input id="q" type="search" placeholder="Buscar clave o texto…"><button id="bBu">Buscar</button><button id="bLi">Limpiar</button></div>
   <button id="bCp">Copiar JSON formateado</button>
-</header>
+</aside>
 <main>
   <div id="drop">Arrastra aquí un archivo .json, o pulsa «Abrir .json», o pega el contenido abajo
     <textarea id="ta" placeholder='Pega aquí el JSON…'></textarea>
@@ -80,6 +85,7 @@ pre#raw{background:var(--panel);border:1px solid var(--bd);border-radius:8px;pad
   <div id="out"></div>
   <pre id="raw" class="hide"></pre>
 </main>
+</div>
 <script>
 const $=s=>document.querySelector(s);
 let DATA=null, view='b';
@@ -96,7 +102,7 @@ function block(key,v,d){
   const isArr=t==='array';
   const ents=isArr?v.map((x,i)=>[i,x]):Object.entries(v);
   const label=isArr?`Lista · ${ents.length} elem.`:`Objeto · ${ents.length} campos`;
-  let h=`<div class="blk ${d>=2?'closed':''}" style="--c:${c}"><div class="hd"><span class="arr">▼</span>`+
+  let h=`<div class="blk ${d>=2?'closed':''}" data-d="${d}" style="--c:${c}"><div class="hd"><span class="arr">▼</span>`+
         `<span class="k" data-s="${esc(String(key)).toLowerCase()}">${isArr&&false?'':esc(String(key))}</span><span class="badge">${label}</span></div><div class="bd">`;
   let rows='';
   for(const [k,x] of ents){
@@ -145,8 +151,8 @@ function load(text){
   catch(e){$('#err').textContent='JSON no válido: '+e.message;}
 }
 $('#out').addEventListener('click',e=>{const h=e.target.closest('.hd');if(h)h.parentElement.classList.toggle('closed');});
-$('#bEx').onclick=()=>document.querySelectorAll('.blk').forEach(b=>b.classList.remove('closed'));
-$('#bCo').onclick=()=>document.querySelectorAll('.blk').forEach((b,i)=>b.classList.toggle('closed',i>0));
+$('#bEx').onclick=()=>{view='b';show();document.querySelectorAll('#out .blk').forEach(b=>b.classList.remove('closed'))};
+$('#bCo').onclick=()=>{view='b';show();document.querySelectorAll('#out .blk').forEach(b=>b.classList.add('closed'))};
 $('#vB').onclick=()=>{view='b';show()};$('#vR').onclick=()=>{view='r';show()};
 $('#bGo').onclick=()=>load($('#ta').value);
 $('#f').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(load)};
@@ -159,8 +165,9 @@ $('#bEj').onclick=()=>{const s={proyecto:"Nave 3",activo:true,version:2.1,respon
   config:{unidades:"mm",tolerancias:{lineal:0.5,angular:"1°"}}};
   $('#ta').value=JSON.stringify(s,null,2);load($('#ta').value)};
 $('#bCp').onclick=async()=>{if(DATA===null)return;try{await navigator.clipboard.writeText(JSON.stringify(DATA,null,2));$('#bCp').textContent='Copiado ✓';setTimeout(()=>$('#bCp').textContent='Copiar JSON formateado',1500)}catch(e){$('#bCp').textContent='No se pudo copiar'}};
-$('#q').oninput=e=>{
-  const q=e.target.value.trim().toLowerCase();
+function buscar(){
+  view='b';show();
+  const q=$('#q').value.trim().toLowerCase();
   document.querySelectorAll('mark').forEach(m=>m.replaceWith(document.createTextNode(m.textContent)));
   const all=document.querySelectorAll('#out .blk,#out .row');
   all.forEach(n=>n.classList.remove('hide'));
@@ -179,7 +186,10 @@ $('#q').oninput=e=>{
     else if(own){b.classList.remove('hide');b.querySelectorAll('.row,.blk').forEach(x=>x.classList.remove('hide'))}
     else b.classList.add('hide');
   });
-};
+}
+$('#bBu').onclick=buscar;
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')buscar()});
+$('#bLi').onclick=()=>{$('#q').value='';buscar();document.querySelectorAll('#out .blk').forEach(b=>b.classList.toggle('closed',b.dataset.d>=2))};
 </script>
 </body>
 </html>
